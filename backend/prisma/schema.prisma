@@ -1,0 +1,365 @@
+// Ideago — Prisma schema
+// AI-powered startup creation platform. Modular monolith, PostgreSQL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// Enums
+// ----------------------------------------------------------------------------
+
+enum Role {
+  FOUNDER
+  EXPERT
+  ADMIN
+}
+
+enum IdeaStage {
+  IDEA
+  VALIDATION
+  PLANNING
+  DESIGN
+  MVP
+  DEVELOPMENT
+  LAUNCH
+  GROWTH
+}
+
+enum IdeaStatus {
+  DRAFT
+  SUBMITTED
+  VALIDATED
+  BUILDING
+  LAUNCHED
+  ARCHIVED
+}
+
+enum ExpertCategory {
+  DEVELOPER
+  DESIGNER
+  PRODUCT_MANAGER
+  MARKETING
+  AI_ENGINEER
+  CONSULTANT
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum MilestoneStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+}
+
+enum HireStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  COMPLETED
+}
+
+enum NotificationType {
+  SYSTEM
+  VALIDATION
+  HIRE
+  WORKSPACE
+}
+
+enum CopilotRole {
+  USER
+  ASSISTANT
+}
+
+// ----------------------------------------------------------------------------
+// Identity
+// ----------------------------------------------------------------------------
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  role          Role     @default(FOUNDER)
+  headline      String?
+  bio           String?
+  avatarUrl     String?
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  ideas         Idea[]
+  refreshTokens RefreshToken[]
+  expertProfile ExpertProfile?
+  hireRequests  HireRequest[]  @relation("FounderHires")
+  notifications Notification[]
+  memberships   ProjectMember[]
+
+  @@index([role])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  revoked   Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+// ----------------------------------------------------------------------------
+// Idea + AI blueprint artifacts
+// ----------------------------------------------------------------------------
+
+model Idea {
+  id           String     @id @default(cuid())
+  ownerId      String
+  owner        User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title        String
+  problem      String
+  solution     String
+  targetMarket String
+  category     String
+  stage        IdeaStage  @default(IDEA)
+  status       IdeaStatus @default(DRAFT)
+  startupScore Int?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  validation    Validation?
+  businessModel BusinessModel?
+  productPlan   ProductPlan?
+  designBrief   DesignBrief?
+  project       Project?
+  copilot       CopilotMessage[]
+  hireRequests  HireRequest[]
+
+  @@index([ownerId])
+  @@index([stage])
+  @@index([status])
+}
+
+model Validation {
+  id              String   @id @default(cuid())
+  ideaId          String   @unique
+  idea            Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  startupScore    Int
+  verdict         String
+  marketSummary   String
+  marketSizeUsd   BigInt
+  targetSegments  Json
+  competitors     Json
+  swot            Json
+  risks           Json
+  recommendations Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model BusinessModel {
+  id                  String   @id @default(cuid())
+  ideaId              String   @unique
+  idea                Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  leanCanvas          Json
+  revenueModel        Json
+  pricingTiers        Json
+  goToMarket          Json
+  personas            Json
+  financialProjection Json
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model ProductPlan {
+  id          String   @id @default(cuid())
+  ideaId      String   @unique
+  idea        Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  prdSummary  String
+  objectives  Json
+  features    Json
+  userStories Json
+  roadmap     Json
+  techStack   Json
+  mvpScope    Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model DesignBrief {
+  id               String   @id @default(cuid())
+  ideaId           String   @unique
+  idea             Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  brandPersonality Json
+  colorPalette     Json
+  typography       Json
+  uxPrinciples     Json
+  screens          Json
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model CopilotMessage {
+  id        String      @id @default(cuid())
+  ideaId    String
+  idea      Idea        @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  role      CopilotRole
+  content   String
+  stage     IdeaStage?
+  createdAt DateTime    @default(now())
+
+  @@index([ideaId])
+}
+
+// ----------------------------------------------------------------------------
+// Collaboration workspace
+// ----------------------------------------------------------------------------
+
+model Project {
+  id        String   @id @default(cuid())
+  ideaId    String   @unique
+  idea      Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  name      String
+  summary   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks      Task[]
+  milestones Milestone[]
+  documents  Document[]
+  members    ProjectMember[]
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("OWNER")
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  assignee    String?
+  dueDate     DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([projectId])
+}
+
+model Milestone {
+  id          String          @id @default(cuid())
+  projectId   String
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      MilestoneStatus @default(PLANNED)
+  dueDate     DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([projectId])
+}
+
+model Document {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title     String
+  content   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+// ----------------------------------------------------------------------------
+// Build marketplace
+// ----------------------------------------------------------------------------
+
+model ExpertProfile {
+  id            String         @id @default(cuid())
+  userId        String         @unique
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category      ExpertCategory
+  headline      String
+  bio           String
+  skills        Json
+  hourlyRateUsd Int
+  rating        Float          @default(0)
+  reviewsCount  Int            @default(0)
+  available     Boolean        @default(true)
+  location      String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  hireRequests HireRequest[]
+
+  @@index([category])
+}
+
+model HireRequest {
+  id        String        @id @default(cuid())
+  expertId  String
+  expert    ExpertProfile @relation(fields: [expertId], references: [id], onDelete: Cascade)
+  founderId String
+  founder   User          @relation("FounderHires", fields: [founderId], references: [id], onDelete: Cascade)
+  ideaId    String?
+  idea      Idea?         @relation(fields: [ideaId], references: [id], onDelete: SetNull)
+  message   String
+  status    HireStatus    @default(PENDING)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([expertId])
+  @@index([founderId])
+}
+
+// ----------------------------------------------------------------------------
+// Notifications
+// ----------------------------------------------------------------------------
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType @default(SYSTEM)
+  title     String
+  body      String
+  link      String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+}

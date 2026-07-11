@@ -1,0 +1,10 @@
+import { Module } from '@nestjs/common';
+import { IdeaService } from './idea.service';
+import { IdeaController } from './idea.controller';
+
+@Module({
+  providers: [IdeaService],
+  controllers: [IdeaController],
+  exports: [IdeaService],
+})
+export class IdeaModule {}

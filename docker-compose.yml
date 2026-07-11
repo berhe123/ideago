@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ideago-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ideago}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ideago}
+      POSTGRES_DB: ${POSTGRES_DB:-ideago}
+    ports:
+      - '${POSTGRES_PORT:-55433}:5432'
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-ideago}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ideago-redis
+    restart: unless-stopped
+    ports:
+      - '${REDIS_PORT:-6380}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: ideago-mailhog
+    restart: unless-stopped
+    ports:
+      - '1026:1025'
+      - '8026:8025'
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: ideago-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ideago}:${POSTGRES_PASSWORD:-ideago}@postgres:5432/${POSTGRES_DB:-ideago}?schema=public
+      REDIS_HOST: redis
+      REDIS_URL: redis://redis:6379
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+      CORS_ORIGIN: http://localhost:5173,http://localhost:5180,http://localhost:5181
+    ports:
+      - '3003:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        VITE_API_URL: http://localhost:3003
+    container_name: ideago-frontend
+    restart: unless-stopped
+    ports:
+      - '5181:80'
+    depends_on:
+      - backend
+
+volumes:
+  pg-data:
+  redis-data:
