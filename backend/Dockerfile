@@ -28,4 +28,4 @@ COPY prisma ./prisma/
 RUN npx prisma generate
 COPY . .
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma db push && npm run prisma:seed && npm run start:dev"]
+CMD ["sh", "-c", "npx prisma db push && node dist/main.js"]
